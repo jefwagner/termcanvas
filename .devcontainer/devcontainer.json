@@ -1,0 +1,68 @@
+{
+  "name": "termcanvas",
+
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "//": "Read the comment in .devcontainer/Dockerfile first. Containment here is a function of what is NOT mounted and NOT installed, so the mount list below is deliberately short. Before adding a mount, ask: does this need to be writable, does it carry a credential, and is there a path that does not require it? Adding a mount here is a security decision, not a convenience one.",
+
+  "mounts": [
+    "source=${localEnv:HOME}/.config/jef/termcanvas-pat,target=/home/vscode/.config/jef/termcanvas-pat,type=bind,readonly",
+    "source=${localEnv:HOME}/.msmtprc,target=/home/vscode/.msmtprc,type=bind,readonly",
+    "source=${localEnv:HOME}/tools/spend.py,target=/home/vscode/tools/spend.py,type=bind,readonly",
+    "source=${localEnv:HOME}/tools/llm-instructions,target=/home/vscode/tools/llm-instructions,type=bind,readonly",
+    "source=${localEnv:HOME}/wiki,target=/home/vscode/wiki,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/lab-bot/pi-auth.json,target=/home/vscode/.pi/agent/auth.json,type=bind,readonly"
+  ],
+
+  "//mounts-why": "Six mounts, and each is deliberate. (1) the repo-scoped PAT, mounted to the same relative path it has on the host so git-askpass.sh needs no container-specific variant. NOT the ~/.config/jef directory — that would also expose the jefscad and pixel-world PATs. (2) msmtp config, read-only — the unsupervised mode sends exactly one summary email per run; this is the only outbound capability the container has. (3) and (4) the shared instruction files and the spend-cap script, read-only so the agent cannot edit the rules it is operating under. (5) the wiki, read-only: the agent reads the distilled kb fundamentals, other projects' pages when a decision has cross-project implications — but cannot write, because the wiki is the one tier where an undetected error compounds instead of being caught. Proposals go to notes/wiki-proposals/ and a human promotes them. NOT ~/.ssh (the personal key reaches every repo on the account, including the wiki), NOT ~/.config/lab-bot (the bot credential), NOT ~/.aws or ~/.azure, NOT the host tool directory, NOT the docker socket (this repo builds nothing locally).",
+
+  "runArgs": [
+    "--memory=8g",
+    "--cpus=4",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges:true"
+  ],
+
+  "//features": "No docker-in-docker: termcanvas builds nothing locally and needs no image builds, so the container gets no docker capability at all.",
+
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.cargo/bin",
+    "SHELL": "/bin/bash",
+
+    "//git": "GIT_ASKPASS points at the tracked script that reads the mounted PAT. GIT_TERMINAL_PROMPT=0 stops a failed lookup from falling back to an interactive prompt, which in an unattended run hangs until the run is killed. GIT_SSH_COMMAND=/bin/false is a second line of defence behind the missing ssh binary: even if one is added later, git cannot silently fall back to SSH.",
+
+    "GIT_ASKPASS": "/workspace/git-askpass.sh",
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_SSH_COMMAND": "/bin/false",
+
+    "UV_LINK_MODE": "copy",
+    "UV_COMPILE_BYTECODE": "1",
+    "RUSTUP_HOME": "/home/vscode/.rustup",
+    "CARGO_HOME": "/home/vscode/.cargo"
+  },
+
+  "//customizations": "No postCreateCommand: the build system is plain cargo with no venv to provision. Commit identity comes from the repo's git config, as on the host.",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer",
+          "editor.formatOnSave": true
+        }
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb"
+      ]
+    }
+  }
+}
