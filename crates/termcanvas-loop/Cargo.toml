@@ -1,0 +1,16 @@
+[package]
+name = "termcanvas-loop"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jef Wagner <jefwagner@gmail.com>"]
+license = "MIT"
+description = "Terminal lifecycle and render/game loop for termcanvas apps"
+repository = "https://github.com/jefwagner/termcanvas"
+keywords = ["terminal", "crossterm", "tui", "loop", "pixels"]  # max 5
+categories = ["command-line-interface"]
+
+[dependencies]
+crossterm = "0.29.0"
+# Color construction for app draw implementations; no format decoders.
+image = { version = "0.25", default-features = false }
+termcanvas = { path = "../termcanvas" }

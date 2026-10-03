@@ -262,7 +262,7 @@ impl TerminalCanvas {
                 for x in 0..new_pix_cols {
                     if x < self.rect.width as u32 {
                         new_cur_buf.put_pixel(x, y, *self.cur_buf.get_pixel(x, y));
-                        new_prev_buf.put_pixel(x, y, *self.prev_buf.get_pixel(0, y));
+                        new_prev_buf.put_pixel(x, y, *self.prev_buf.get_pixel(x, y));
                     }
                 }
             }
@@ -398,14 +398,61 @@ impl TerminalCanvas {
     where
         T: Write + QueueableCommand,
     {
+        let clip = terminal::size().ok();
+        self.emit_diff(stream, clip)
+    }
+
+    /// Write all changed pixels to any output stream, without clipping to the
+    /// terminal size.
+    ///
+    /// Behaves like [`render`](TerminalCanvas::render) except that changed
+    /// cells are never clipped against the terminal dimensions and no
+    /// terminal-size query is made. This is what makes the canvas usable when
+    /// the output stream is not a terminal at all — for example when
+    /// redirected to a file — since [`render`](TerminalCanvas::render) fails
+    /// if it cannot query the terminal size.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if any underlying write to `stream` fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use termcanvas::{CharRect, TerminalCanvas};
+    /// use image::Rgba;
+    /// use std::io::stdout;
+    ///
+    /// let rect = CharRect { left: 0, top: 0, width: 80, height: 10 };
+    /// let mut canvas = TerminalCanvas::new(&rect);
+    ///
+    /// canvas.fill(&Rgba([0, 128, 255, 255]));
+    ///
+    /// // Works even when stdout is redirected to a file:
+    /// canvas.render_unclipped(&mut stdout()).expect("render failed");
+    /// ```
+    pub fn render_unclipped<T>(&mut self, stream: &mut T) -> Result<(), io::Error>
+    where
+        T: Write + QueueableCommand,
+    {
+        self.emit_diff(stream, None)
+    }
+
+    /// Compute the diff and emit it as escape sequences to `stream`.
+    ///
+    /// When `clip` is `Some((width, height))` cells beyond those terminal
+    /// dimensions are skipped; `None` emits every changed cell.
+    fn emit_diff<T>(&mut self, stream: &mut T, clip: Option<(u16, u16)>) -> Result<(), io::Error>
+    where
+        T: Write + QueueableCommand,
+    {
         self.calc_diff();
         if self.diff.is_empty() {
             return Ok(());
         }
-        let (term_width, term_height) = terminal::size()?;
         // queue up all the pixel changes
         for (x, y, term_char) in &self.diff {
-            if x < &term_width && y < &term_height {
+            if clip.is_none_or(|(w, h)| x < &w && y < &h) {
                 // move the cursore to character positoin
                 stream.queue(cursor::MoveTo(*x, *y))?;
                 let Rgba([r, g, b, _a]) = term_char.top;
@@ -485,5 +532,44 @@ impl GenericImage for TerminalCanvas {
             base.blend(&pixel);
             self.cur_buf.put_pixel(x, y, base);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_resize_preserves_previous_buffer_contents() {
+        let rect = CharRect {
+            left: 0,
+            top: 0,
+            width: 4,
+            height: 2,
+        };
+        let mut canvas = TerminalCanvas::new(&rect);
+
+        // Draw distinct colors and render once (unclipped works headless) to
+        // populate the previous buffer.
+        canvas.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        canvas.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
+        canvas.put_pixel(2, 0, Rgba([0, 0, 255, 255]));
+        canvas
+            .render_unclipped(&mut Vec::new())
+            .expect("render_unclipped into a Vec should never fail");
+
+        // Grow the canvas; the previous buffer must keep each pixel's own
+        // old value (not column 0's), or the next diff is wrong.
+        canvas.resize(&CharRect {
+            left: 0,
+            top: 0,
+            width: 6,
+            height: 3,
+        });
+        assert_eq!(canvas.prev_buf.get_pixel(0, 0), &Rgba([255, 0, 0, 255]));
+        assert_eq!(canvas.prev_buf.get_pixel(1, 0), &Rgba([0, 255, 0, 255]));
+        assert_eq!(canvas.prev_buf.get_pixel(2, 0), &Rgba([0, 0, 255, 255]));
+        // Undrawn pixels mirror the canvas init color after a render
+        assert_eq!(canvas.prev_buf.get_pixel(1, 1), &Rgba([0, 0, 0, 255]));
     }
 }

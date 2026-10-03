@@ -1,0 +1,20 @@
+[package]
+name = "termcanvas"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jef Wagner <jefwagner@gmail.com>"]
+license = "MIT"
+description = "A canvas-like interface over terminal regions using unicode half blocks"
+repository = "https://github.com/jefwagner/termcanvas"
+readme = "../../README.md"
+keywords = ["terminal", "canvas", "crossterm", "tui", "pixels"]  # max 5
+categories = ["command-line-interface"]
+
+[lib]
+name = "termcanvas"
+path = "src/lib.rs"
+
+[dependencies]
+crossterm = "0.29.0"
+image = { version = "0.25", default-features = false }
+
