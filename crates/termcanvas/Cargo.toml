@@ -18,7 +18,3 @@ path = "src/lib.rs"
 crossterm = "0.29.0"
 image = { version = "0.25", default-features = false }
 
-[dev-dependencies]
-rand = "0.9"
-# Examples use image::open() which needs format decoders
-image = { version = "0.25", features = ["jpeg", "png"] }

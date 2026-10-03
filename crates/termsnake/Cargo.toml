@@ -1,0 +1,25 @@
+[package]
+name = "termsnake"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jef Wagner <jefwagner@gmail.com>"]
+license = "MIT"
+description = "Classic snake game for the terminal, rendered with termcanvas"
+repository = "https://github.com/jefwagner/termcanvas"
+keywords = ["terminal", "game", "snake", "tui", "pixels"]  # max 5
+categories = ["command-line-interface", "games"]
+
+[lib]
+name = "termsnake"
+path = "src/lib.rs"
+
+[[bin]]
+name = "termsnake"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.29.0"
+image = { version = "0.25", default-features = false }
+rand = "0.9"
+termcanvas = { path = "../termcanvas" }
+termcanvas-loop = { path = "../termcanvas-loop" }
