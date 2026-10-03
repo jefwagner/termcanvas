@@ -1171,6 +1171,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "termcanvas-loop"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "image",
+ "termcanvas",
+]
+
+[[package]]
 name = "termviewer"
 version = "0.1.0"
 dependencies = [
