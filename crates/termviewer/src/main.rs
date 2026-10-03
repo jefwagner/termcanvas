@@ -11,7 +11,7 @@
 mod sizing;
 
 use clap::Parser;
-use crossterm::{QueueableCommand, cursor, terminal};
+use crossterm::terminal;
 use image::GenericImage;
 use image::imageops::FilterType;
 use std::io::{IsTerminal, Write, stdout};
@@ -132,18 +132,13 @@ fn run(cli: &Cli) -> Result<(), String> {
         .copy_from(&scaled, 0, 0)
         .map_err(|e| format!("{e}"))?;
 
-    // Output hygiene: one frame — cursor home, full frame, trailing newline.
-    // No Clear(All), no cursor hide/show, no key-wait (that would hang piped
-    // runs). The reserved bottom line is left to the shell prompt.
+    // Output: one frame written as a linear flow of rows, starting at the
+    // stream's current position — below the command on a tty, and a plain
+    // linear stream in a piped file. No Clear(All), no cursor addressing,
+    // no key-wait (that would hang piped runs).
     let mut out = stdout().lock();
-    out.queue(cursor::MoveTo(0, 0)).map_err(io_err)?;
-    if tty {
-        canvas.render(&mut out).map_err(io_err)?;
-    } else {
-        canvas.render_unclipped(&mut out).map_err(io_err)?;
-    }
     writeln!(out).map_err(io_err)?;
-    out.flush().map_err(io_err)?;
+    canvas.render_flow(&mut out).map_err(io_err)?;
     Ok(())
 }
 

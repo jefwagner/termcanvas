@@ -438,6 +438,83 @@ impl TerminalCanvas {
         self.emit_diff(stream, None)
     }
 
+    /// Write the full canvas to a stream as a linear flow of rows.
+    ///
+    /// Unlike [`render`](TerminalCanvas::render) and
+    /// [`render_unclipped`](TerminalCanvas::render_unclipped), this emits no
+    /// cursor-addressing escapes at all: every cell of the current buffer is
+    /// written left-to-right, top-to-bottom, rows separated by newlines,
+    /// starting at the stream's *current* position and ending with a color
+    /// reset and newline. On a terminal the frame therefore lands below
+    /// wherever the cursor is — below the command that produced it — and
+    /// scrolls naturally if it is taller than the remaining screen. In a
+    /// piped file it is a plain linear stream that needs only color-sequence
+    /// support, no cursor-movement interpretation. Redundant color changes
+    /// between adjacent cells are skipped.
+    ///
+    /// This is a full-frame writer, not a diff: every cell is emitted. The
+    /// canvas' own rectangle position is irrelevant, and after writing, the
+    /// previous buffer is updated so a later diff render only emits genuine
+    /// changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if any underlying write to `stream` fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use termcanvas::{CharRect, TerminalCanvas};
+    /// use image::Rgba;
+    /// use std::io::stdout;
+    ///
+    /// let rect = CharRect { left: 0, top: 0, width: 40, height: 10 };
+    /// let mut canvas = TerminalCanvas::new(&rect);
+    ///
+    /// canvas.fill(&Rgba([0, 128, 255, 255]));
+    ///
+    /// // Writes rows linearly from the current cursor position — works on
+    /// // a terminal (below the prompt) and in a piped file alike.
+    /// canvas.render_flow(&mut stdout()).expect("render failed");
+    /// ```
+    pub fn render_flow<T>(&mut self, stream: &mut T) -> Result<(), io::Error>
+    where
+        T: Write + QueueableCommand,
+    {
+        let pix_cols = self.rect.width as u32;
+        let pix_rows = 2 * self.rect.height as u32;
+        let mut fg: Option<Color> = None;
+        let mut bg: Option<Color> = None;
+        for y in (0..pix_rows).step_by(2) {
+            for x in 0..pix_cols {
+                let Rgba([r, g, b, _a]) = *self.cur_buf.get_pixel(x, y);
+                let new_fg = Color::Rgb { r, g, b };
+                if fg != Some(new_fg) {
+                    stream.queue(SetForegroundColor(new_fg))?;
+                    fg = Some(new_fg);
+                }
+                let Rgba([r, g, b, _a]) = *self.cur_buf.get_pixel(x, y + 1);
+                let new_bg = Color::Rgb { r, g, b };
+                if bg != Some(new_bg) {
+                    stream.queue(SetBackgroundColor(new_bg))?;
+                    bg = Some(new_bg);
+                }
+                write!(stream, "{VERT_HALF_BLOCK}")?;
+            }
+            if y + 2 < pix_rows {
+                writeln!(stream)?;
+            }
+        }
+        stream.queue(ResetColor)?;
+        writeln!(stream)?;
+        // Mark the current buffer as rendered so a later diff render only
+        // writes genuine changes.
+        self.prev_buf
+            .copy_from(&self.cur_buf, 0, 0)
+            .expect("Failed to copy current buffer to previous buffer");
+        stream.flush()
+    }
+
     /// Compute the diff and emit it as escape sequences to `stream`.
     ///
     /// When `clip` is `Some((width, height))` cells beyond those terminal
@@ -571,5 +648,46 @@ mod test {
         assert_eq!(canvas.prev_buf.get_pixel(2, 0), &Rgba([0, 0, 255, 255]));
         // Undrawn pixels mirror the canvas init color after a render
         assert_eq!(canvas.prev_buf.get_pixel(1, 1), &Rgba([0, 0, 0, 255]));
+    }
+
+    #[test]
+    fn test_render_flow_emits_linear_rows_without_cursor_addressing() {
+        // Position the rect away from the origin: flow output must not care
+        let rect = CharRect {
+            left: 5,
+            top: 3,
+            width: 2,
+            height: 2,
+        };
+        let mut canvas = TerminalCanvas::new(&rect);
+        canvas.put_pixel(0, 0, Rgba([255, 0, 0, 255])); // col 0 top: red
+        canvas.put_pixel(0, 1, Rgba([0, 255, 0, 255])); // col 0 bottom: green
+        canvas.put_pixel(1, 0, Rgba([0, 0, 255, 255])); // col 1 top: blue
+        // everything else stays canvas-init opaque black
+
+        let mut out = Vec::new();
+        canvas
+            .render_flow(&mut out)
+            .expect("render_flow into a Vec should never fail");
+
+        // Two rows, each newline-separated, no MoveTo anywhere, reset+newline
+        // at the end. Row 2 reuses row 1's background (black), so only the
+        // foreground changes.
+        assert_eq!(
+            String::from_utf8(out).expect("utf8"),
+            concat!(
+                "\x1b[38;2;255;0;0m",
+                "\x1b[48;2;0;255;0m",
+                "▀", // row 0, cell 0
+                "\x1b[38;2;0;0;255m",
+                "\x1b[48;2;0;0;0m",
+                "▀",
+                "\n", // row 0, cell 1
+                "\x1b[38;2;0;0;0m",
+                "▀▀", // row 1: only fg changes; bg black persists
+                "\x1b[0m",
+                "\n",
+            )
+        );
     }
 }
