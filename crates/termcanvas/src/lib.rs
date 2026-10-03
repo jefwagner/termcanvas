@@ -262,7 +262,7 @@ impl TerminalCanvas {
                 for x in 0..new_pix_cols {
                     if x < self.rect.width as u32 {
                         new_cur_buf.put_pixel(x, y, *self.cur_buf.get_pixel(x, y));
-                        new_prev_buf.put_pixel(x, y, *self.prev_buf.get_pixel(0, y));
+                        new_prev_buf.put_pixel(x, y, *self.prev_buf.get_pixel(x, y));
                     }
                 }
             }
@@ -532,5 +532,44 @@ impl GenericImage for TerminalCanvas {
             base.blend(&pixel);
             self.cur_buf.put_pixel(x, y, base);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_resize_preserves_previous_buffer_contents() {
+        let rect = CharRect {
+            left: 0,
+            top: 0,
+            width: 4,
+            height: 2,
+        };
+        let mut canvas = TerminalCanvas::new(&rect);
+
+        // Draw distinct colors and render once (unclipped works headless) to
+        // populate the previous buffer.
+        canvas.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        canvas.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
+        canvas.put_pixel(2, 0, Rgba([0, 0, 255, 255]));
+        canvas
+            .render_unclipped(&mut Vec::new())
+            .expect("render_unclipped into a Vec should never fail");
+
+        // Grow the canvas; the previous buffer must keep each pixel's own
+        // old value (not column 0's), or the next diff is wrong.
+        canvas.resize(&CharRect {
+            left: 0,
+            top: 0,
+            width: 6,
+            height: 3,
+        });
+        assert_eq!(canvas.prev_buf.get_pixel(0, 0), &Rgba([255, 0, 0, 255]));
+        assert_eq!(canvas.prev_buf.get_pixel(1, 0), &Rgba([0, 255, 0, 255]));
+        assert_eq!(canvas.prev_buf.get_pixel(2, 0), &Rgba([0, 0, 255, 255]));
+        // Undrawn pixels mirror the canvas init color after a render
+        assert_eq!(canvas.prev_buf.get_pixel(1, 1), &Rgba([0, 0, 0, 255]));
     }
 }
