@@ -10,10 +10,10 @@ consume them.
 |---|---|---|
 | `termcanvas` | Canvas over terminal regions: half-block pixels, double-buffered diff rendering, `image` integration | exists (0.1.0) |
 | `termcanvas-loop` | Terminal lifecycle + render/game loop: raw mode, event handling, frame pacing, redraw discipline | planned — distill from `examples/snake.rs` |
-| `apps/termcanvas-pic` | CLI picture viewer | planned |
-| `apps/termcanvas-video` | Video player (alternate screen) | planned |
-| `apps/termcanvas-saver` | Full-terminal screensaver | planned |
-| `apps/termcanvas-arcade` | Full-terminal game menu shell | planned |
+| `apps/termviewer` | CLI picture viewer | planned |
+| `apps/termvideo` | Video player (alternate screen) | planned |
+| `apps/termsaver` | Full-terminal screensaver | planned |
+| `apps/termarcade` | Full-terminal game menu shell | planned |
 | games | snake, tetris, breakout, ... | open question: standalone bins or crates consumed by the arcade |
 
 ## Milestones (in order)
@@ -27,10 +27,12 @@ consume them.
 3. **`termcanvas-loop` v0.** Distill the loop (terminal setup, input,
    pacing) out of `examples/snake.rs`; snake becomes its first consumer.
    Extract from working code, don't design from imagination.
-4. **Video CLI.** Stretches the loop: fps pacing, alternate-screen
+4. **Snake game TUI app** First consumer of loop. Promote `examples/snake.rs` 
+   as full in-terminal TUI, alternate screen, resize handling, input handling.
+5. **Video player TUI app.** Stretches the loop: fps pacing, alternate-screen
    lifecycle, large-frame performance.
-5. **Screensaver.** Full-terminal, idle-driven variant of the loop.
-6. **Arcade + games.** Menu shell hosting games; revisit the
+6. **Screensaver.** Full-terminal, idle-driven variant of the loop.
+7. **Arcade + games.** Menu shell hosting games; revisit the
    games-as-crates question here.
 
 ## Open questions
