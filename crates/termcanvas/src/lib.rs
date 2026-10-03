@@ -398,14 +398,61 @@ impl TerminalCanvas {
     where
         T: Write + QueueableCommand,
     {
+        let clip = terminal::size().ok();
+        self.emit_diff(stream, clip)
+    }
+
+    /// Write all changed pixels to any output stream, without clipping to the
+    /// terminal size.
+    ///
+    /// Behaves like [`render`](TerminalCanvas::render) except that changed
+    /// cells are never clipped against the terminal dimensions and no
+    /// terminal-size query is made. This is what makes the canvas usable when
+    /// the output stream is not a terminal at all — for example when
+    /// redirected to a file — since [`render`](TerminalCanvas::render) fails
+    /// if it cannot query the terminal size.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if any underlying write to `stream` fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use termcanvas::{CharRect, TerminalCanvas};
+    /// use image::Rgba;
+    /// use std::io::stdout;
+    ///
+    /// let rect = CharRect { left: 0, top: 0, width: 80, height: 10 };
+    /// let mut canvas = TerminalCanvas::new(&rect);
+    ///
+    /// canvas.fill(&Rgba([0, 128, 255, 255]));
+    ///
+    /// // Works even when stdout is redirected to a file:
+    /// canvas.render_unclipped(&mut stdout()).expect("render failed");
+    /// ```
+    pub fn render_unclipped<T>(&mut self, stream: &mut T) -> Result<(), io::Error>
+    where
+        T: Write + QueueableCommand,
+    {
+        self.emit_diff(stream, None)
+    }
+
+    /// Compute the diff and emit it as escape sequences to `stream`.
+    ///
+    /// When `clip` is `Some((width, height))` cells beyond those terminal
+    /// dimensions are skipped; `None` emits every changed cell.
+    fn emit_diff<T>(&mut self, stream: &mut T, clip: Option<(u16, u16)>) -> Result<(), io::Error>
+    where
+        T: Write + QueueableCommand,
+    {
         self.calc_diff();
         if self.diff.is_empty() {
             return Ok(());
         }
-        let (term_width, term_height) = terminal::size()?;
         // queue up all the pixel changes
         for (x, y, term_char) in &self.diff {
-            if x < &term_width && y < &term_height {
+            if clip.is_none_or(|(w, h)| x < &w && y < &h) {
                 // move the cursore to character positoin
                 stream.queue(cursor::MoveTo(*x, *y))?;
                 let Rgba([r, g, b, _a]) = term_char.top;
