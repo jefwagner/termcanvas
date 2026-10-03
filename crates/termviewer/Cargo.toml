@@ -1,0 +1,22 @@
+[package]
+name = "termviewer"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jef Wagner <jefwagner@gmail.com>"]
+license = "MIT"
+description = "Display an image file in the terminal as unicode half-block pixels"
+repository = "https://github.com/jefwagner/termcanvas"
+keywords = ["terminal", "cli", "image", "tui", "pixels"]  # max 5
+categories = ["command-line-interface"]
+
+[[bin]]
+name = "termviewer"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29.0"
+# Format decoders are a real dependency here: termviewer is the component
+# that reads image files. termcanvas itself keeps decoders dev-only.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+termcanvas = { path = "../termcanvas" }
