@@ -110,10 +110,29 @@ independently. See **Containment** for what the environment does and does not bu
    work from it alone.
 2. **Approval gate**: do not start work until jef explicitly approves `goal.md`.
    Revise and re-submit until approved.
-3. **Isolate**: create a worktree before anything else —
-   `git worktree add ../termcanvas-loop -b agent/<date> main`, and work in
-   `../termcanvas-loop`. Never work unattended in the main checkout. This is
+3. **Isolate**: create a worktree before anything else — from *inside the
+   devcontainer*, so git records container-absolute gitdir paths that match the
+   `/workspace` mount:
+   `git worktree add worktree/agent-<date> -b agent/<date> dev`, and work in
+   `worktree/agent-<date>`. Never work unattended in the main checkout. This is
    what keeps `~/projects/termcanvas` itself untouched.
+
+   Two hard rules follow from how linked worktrees resolve paths. A worktree's
+   `.git` is a *file* holding an absolute path to the main repo's `.git`, and
+   the container mounts only the repo itself (`workspaceMount`), so:
+
+   - **Create the worktree from inside the container, never from the host.**
+     Created inside, the gitdir path points at `/workspace/.git/...` and
+     matches the mount; created on the host it points at the host path and git
+     is dead inside the container. The worktree therefore looks broken from the
+     host — that asymmetry is intended: it guarantees unattended work only
+     happens in the container.
+   - **Never use sibling-level worktrees (`../termcanvas-...`).** A sibling
+     directory is outside the workspace mount, so it cannot see the main
+     repo's `.git` at all; git is dead inside the container there.
+
+   `worktree/` is gitignored; `git worktree add` creates the directory on
+   demand, and nothing under it is ever committed.
 4. **Independent work**: proceed without further check-ins. Track spend with:
    `uv run ~/tools/spend.py --cap <cap from goal.md>`
    Check periodically. It **reports and exits non-zero**; it does not interrupt,
@@ -124,7 +143,7 @@ independently. See **Containment** for what the environment does and does not bu
    work is blocked. Then:
 
    - run the full test suite (`cargo test`, `cargo clippy`) and record the result;
-   - push the branch — **never merge it, never push to `main`**;
+   - push the branch — **never merge it, never push to `dev` or `main`**;
    - write a summary email to **jefwagner@gmail.com only** with what was done,
      what was learned, current state, next steps, test results, and the final
      spend from `uv run ~/tools/spend.py`;
@@ -175,8 +194,8 @@ retrying in a loop — a silent email means jef does not know work is waiting.
 | `todo.md` | current session | commit-sized actionable items (1–4) | every planning session |
 | `backlog.md` | persistent | raw ideas, mid-session discoveries | triaged in planning mode |
 
-(No `ROADMAP.md` yet — the crate is small enough that `todo.md` suffices. Add a
-roadmap when the feature list outgrows one page.)
+`ROADMAP.md` holds the long-term shape (library crates and planned apps,
+milestone order); update it when milestones land or the plan changes.
 
 `todo.md` is session-scoped: rewritten at each planning session, cleared at the
 end of a work chunk.
@@ -320,9 +339,11 @@ say so rather than working around it.
 
 ### Branches
 
-- **The primary branch is `main`** (currently the only branch).
-- Work goes on `agent/<short-desc>` branches. Never commit to `main` directly
-  from an agent session.
+- **Git-flow: `dev` is active, `main` holds releases.** Both reject
+  force-pushes (GitHub branch protection) — that binds jef too. Solo dev: the
+  only branches beyond these are the `agent/*` work branches below.
+- Work goes on `agent/<short-desc>` branches. Never commit to `main` or `dev`
+  directly from an agent session.
 - Prefer a worktree for anything unattended (see Unsupervised mode, step 3).
 
 ### Residual risk — the honest remainder

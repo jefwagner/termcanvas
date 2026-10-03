@@ -1,1 +1,9 @@
 /target
+
+# linked worktrees for unattended (unsupervised) runs — created inside the
+# devcontainer by `git worktree add`, never committed (see AGENTS.md)
+/worktree/
+
+# session-scoped planning file, rewritten each session (see AGENTS.md);
+# persistent planning lives in ROADMAP.md and backlog.md
+/todo.md
