@@ -26,8 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     ddgr \
-    msmtp \
-    msmtp-mta \
     && rm -rf /var/lib/apt/lists/*
 
 # Strip every openssh component, not just the client, so nothing can be
@@ -85,10 +83,9 @@ RUN mkdir -p /workspace && chown vscode:vscode /workspace
 USER vscode
 WORKDIR /workspace
 
-# msmtp is present: the unsupervised mode in AGENTS.md sends exactly one
-# summary email per run, to one address, and ~/.msmtprc is mounted read-only
-# for that purpose. If that ever changes, remove msmtp here and the mount —
-# and re-read that section, because a summary email is a
-# send-to-the-outside-world action that deserves a second thought.
+# No msmtp and no ~/.msmtprc. The one outbound message per unsupervised run
+# goes through notify-jef (mounted from ~/tools/bin-container), which only
+# drops a file in ~/outbox; agentd on the host holds the mail config and the
+# recipient. Do not add msmtp back here.
 
 CMD ["sleep", "infinity"]

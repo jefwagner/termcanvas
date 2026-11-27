@@ -13,14 +13,22 @@
 
   "mounts": [
     "source=${localEnv:HOME}/.config/jef/termcanvas-pat,target=/home/vscode/.config/jef/termcanvas-pat,type=bind,readonly",
-    "source=${localEnv:HOME}/.msmtprc,target=/home/vscode/.msmtprc,type=bind,readonly",
     "source=${localEnv:HOME}/tools/spend.py,target=/home/vscode/tools/spend.py,type=bind,readonly",
-    "source=${localEnv:HOME}/tools/llm-instructions,target=/home/vscode/tools/llm-instructions,type=bind,readonly",
+    "source=${localEnv:HOME}/tools/agent-kit/instructions,target=/home/vscode/tools/llm-instructions,type=bind,readonly",
+    "source=${localEnv:HOME}/tools/agent-kit/skills/worker,target=/home/vscode/.pi/agent/skills,type=bind,readonly",
+    "source=${localEnv:HOME}/.local/state/agentd/outbox/${localWorkspaceFolderBasename}/new,target=/home/vscode/outbox,type=bind",
+    "source=${localEnv:HOME}/tools/bin-container,target=/home/vscode/tools/bin-container,type=bind,readonly",
     "source=${localEnv:HOME}/wiki,target=/home/vscode/wiki,type=bind,readonly",
     "source=${localEnv:HOME}/.config/lab-bot/pi-auth.json,target=/home/vscode/.pi/agent/auth.json,type=bind,readonly"
   ],
 
-  "//mounts-why": "Six mounts, and each is deliberate. (1) the repo-scoped PAT, mounted to the same relative path it has on the host so git-askpass.sh needs no container-specific variant. NOT the ~/.config/jef directory — that would also expose the jefscad and pixel-world PATs. (2) msmtp config, read-only — the unsupervised mode sends exactly one summary email per run; this is the only outbound capability the container has. (3) and (4) the shared instruction files and the spend-cap script, read-only so the agent cannot edit the rules it is operating under. (5) the wiki, read-only: the agent reads the distilled kb fundamentals, other projects' pages when a decision has cross-project implications — but cannot write, because the wiki is the one tier where an undetected error compounds instead of being caught. Proposals go to notes/wiki-proposals/ and a human promotes them. NOT ~/.ssh (the personal key reaches every repo on the account, including the wiki), NOT ~/.config/lab-bot (the bot credential), NOT ~/.aws or ~/.azure, NOT the host tool directory, NOT the docker socket (this repo builds nothing locally).",
+  "//mounts-why": "Eight mounts, and each is deliberate. (1) the repo-scoped PAT, mounted to the same relative path it has on the host so git-askpass.sh needs no container-specific variant. NOT the ~/.config/jef directory — that would also expose the jefscad and pixel-world PATs. (2) the spend-cap script and (3) agent-kit's instructions/ (AGENTS.global.md plus generated legacy files, at the old ~/tools/llm-instructions path) and (4) its worker skills where pi looks for them, all read-only so the agent cannot edit the rules it is operating under. (5) this repo's outbox new/ directory, the only writable mount besides the workspace: notify-jef drops one message there and the host's agentd validates it, rate-limits it and mails it to jef. The container never sees ~/.msmtprc, a recipient, or the outbox's sent/ and rejected/ (agentd invariant I5). (6) ~/tools/bin-container, read-only and on PATH, for notify-jef. (7) the wiki, read-only: the agent reads the distilled kb fundamentals, other projects' pages when a decision has cross-project implications — but cannot write, because the wiki is the one tier where an undetected error compounds instead of being caught. It is becoming a catalog maintained by the orchestrator; things worth keeping go in notes/. (8) the lab-bot's spend-capped OpenRouter key for pi, not a personal one. NOT ~/.ssh (the personal key reaches every repo on the account, including the wiki), NOT the rest of ~/.config/lab-bot (the bot's GitHub credential), NOT ~/.aws or ~/.azure, NOT the rest of ~/tools, NOT the docker socket (this repo builds nothing locally).",
+
+  "//initializeCommand": "Runs on the HOST before the container starts. Creates this repo's outbox (new/ for the container, sent/ and rejected/ for agentd) so Docker does not create the bind source root-owned. The project name is the directory basename, the same value the mount above uses and the one agentd tags mail with (I4).",
+  "initializeCommand": "mkdir -p \"$HOME/.local/state/agentd/outbox/${localWorkspaceFolderBasename}/new\" \"$HOME/.local/state/agentd/outbox/${localWorkspaceFolderBasename}/sent\" \"$HOME/.local/state/agentd/outbox/${localWorkspaceFolderBasename}/rejected\"",
+
+  "//postStartCommand": "Links the global instructions into place for pi. The link points into the read-only directory mount, not a single-file bind, which would pin the inode and go stale when the host file is edited.",
+  "postStartCommand": "mkdir -p /home/vscode/.pi/agent && ln -sfn /home/vscode/tools/llm-instructions/AGENTS.global.md /home/vscode/.pi/agent/AGENTS.md",
 
   "runArgs": [
     "--memory=8g",
@@ -32,7 +40,7 @@
   "//features": "No docker-in-docker: termcanvas builds nothing locally and needs no image builds, so the container gets no docker capability at all.",
 
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/vscode/.cargo/bin",
+    "PATH": "${containerEnv:PATH}:/home/vscode/.cargo/bin:/home/vscode/tools/bin-container",
     "SHELL": "/bin/bash",
 
     "//git": "GIT_ASKPASS points at the tracked script that reads the mounted PAT. GIT_TERMINAL_PROMPT=0 stops a failed lookup from falling back to an interactive prompt, which in an unattended run hangs until the run is killed. GIT_SSH_COMMAND=/bin/false is a second line of defence behind the missing ssh binary: even if one is added later, git cannot silently fall back to SSH.",

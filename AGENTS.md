@@ -34,130 +34,21 @@ the living documentation and test harness for real terminal behavior.
 
 ## Modes of work
 
-Mode switches are explicit — say "pair", "tdd", or "unsupervised" to change modes.
-The default, when no mode is stated, is **pair**.
+The modes and their rules come from the global instructions
+(`~/.pi/agent/AGENTS.md`) and the skills: `/skill:pair`, `/skill:tdd-plan`
+then `/skill:tdd-implement`, `/skill:unsupervised-goal` then
+`/skill:unsupervised-run`. The default is **pair**. All three modes are
+allowed in this repo; switching is jef's call.
 
-Three nested loops, each with a different unit of approval:
+What this repo adds:
 
-| Mode           | Unit of work              | Writes need approval? |
-|----------------|---------------------------|-----------------------|
-| `pair`         | single command/change     | yes, per command      |
-| `tdd`          | task / commit-sized item  | no                    |
-| `unsupervised` | feature / whole goal      | no                    |
-
-The nesting widens the unit of work that may be done unattended: a single command
-in pair, a task in tdd, a whole feature or goal in unsupervised. Stepping up is
-jef's call, not mine — if a task needs many writes, say so and suggest `tdd`
-rather than quietly widening the loop.
-
-### Pair mode (default)
-
-Pair-programming at the keyboard. Short back-and-forth, one or two ideas per
-interaction — no long essays presenting a pile of options. Every idea and change
-gets discussed as we go: a sentence or two saying what I'm about to do and why,
-then act. No autopilot — no multi-file refactors or multi-step plans executed
-without checking in between steps.
-
-Freely, without asking:
-
-- read files, search the repo (`rg`, `find`, `grep`), read `notes/`
-- non-destructive inspection: `ls`, `cat`, `head`, `tail`, `wc`, `git status`,
-  `git log`, `git diff`
-- the project's read-only checks: `cargo check`, `cargo test`, `cargo clippy`,
-  `cargo fmt --check`, `cargo doc --no-deps`, `cargo build`
-
-Ask for explicit approval, per command, before:
-
-- writing, editing, creating, moving, or deleting any file — including `notes/`,
-  and anything outside this repo
-- destructive or state-changing commands: `rm`, `mv`, `cp` over an existing
-  file, `git commit`/`push`/`checkout`/`reset`, or anything else that changes
-  state on disk
-- installing packages, editing config outside the repo, sending mail
-
-Approval is per command, not blanket — "yes, go ahead" for one command does not
-authorize the next. One approval covers one file: a multi-hunk edit within a
-single file is one atomic change, but two files is two approvals. Never commit
-unless asked in that same turn, even if every individual write was approved.
-
-Full rules: read `~/tools/llm-instructions/pair.md`.
-
-### TDD mode (interactive)
-
-Structured mode for larger chunks of work. Two sub-modes:
-
-- **Plan** — read `~/tools/llm-instructions/planning.md` first. Produces 1–4
-  one-commit-sized items in `todo.md` and triages `backlog.md`.
-- **Implement** — read `~/tools/llm-instructions/implementation.md` first. TDD
-  loop with hard STOP gates requiring user approval at the task level.
-
-Writes, edits, and commits are **not** gated per command here — the task-level
-STOP gates are the approval unit. Commits remain one-item-per-commit, and I still
-state intent before each task, but I don't ask before every `edit`.
-
-The **(a)/(b) test split** below applies and is the most important
-project-specific rule here. When unsure, check the tier before rewriting a test.
-
-### Unsupervised mode
-
-For well-scoped work that jef approves up front and then leaves to run
-independently. See **Containment** for what the environment does and does not buy.
-
-1. **Goal stage (conversational)**: work with jef to draft `goal.md` at the repo
-   root. It must contain: the goal, constraints, a definition of done, and a
-   **spend cap in dollars** agreed during the conversation. Write `goal.md` as
-   a complete prompt — an agent with no other context should be able to do the
-   work from it alone.
-2. **Approval gate**: do not start work until jef explicitly approves `goal.md`.
-   Revise and re-submit until approved.
-3. **Isolate**: create a worktree before anything else — from *inside the
-   devcontainer*, so git records container-absolute gitdir paths that match the
-   `/workspace` mount:
-   `git worktree add worktree/agent-<date> -b agent/<date> dev`, and work in
-   `worktree/agent-<date>`. Never work unattended in the main checkout. This is
-   what keeps `~/projects/termcanvas` itself untouched.
-
-   Two hard rules follow from how linked worktrees resolve paths. A worktree's
-   `.git` is a *file* holding an absolute path to the main repo's `.git`, and
-   the container mounts only the repo itself (`workspaceMount`), so:
-
-   - **Create the worktree from inside the container, never from the host.**
-     Created inside, the gitdir path points at `/workspace/.git/...` and
-     matches the mount; created on the host it points at the host path and git
-     is dead inside the container. The worktree therefore looks broken from the
-     host — that asymmetry is intended: it guarantees unattended work only
-     happens in the container.
-   - **Never use sibling-level worktrees (`../termcanvas-...`).** A sibling
-     directory is outside the workspace mount, so it cannot see the main
-     repo's `.git` at all; git is dead inside the container there.
-
-   `worktree/` is gitignored; `git worktree add` creates the directory on
-   demand, and nothing under it is ever committed.
-4. **Independent work**: proceed without further check-ins. Track spend with:
-   `uv run ~/tools/spend.py --cap <cap from goal.md>`
-   Check periodically. It **reports and exits non-zero**; it does not interrupt,
-   so treating that exit code as a stop signal *is* the enforcement. The cap is
-   an upper bound on money, not a bound on time — `goal.md` must be small enough
-   to finish.
-5. **Stop and report**: stop when the goal is met, the cap is exceeded, or the
-   work is blocked. Then:
-
-   - run the full test suite (`cargo test`, `cargo clippy`) and record the result;
-   - push the branch — **never merge it, never push to `dev` or `main`**;
-   - write a summary email to **jefwagner@gmail.com only** with what was done,
-     what was learned, current state, next steps, test results, and the final
-     spend from `uv run ~/tools/spend.py`;
-   - send it with `msmtp -t < summary-email.txt`, subject prefixed `[termcanvas]`
-     so it is filterable;
-   - **also commit the same summary into the branch** as
-     `notes/unsupervised-<date>.md`, because email is the notification and the
-     file is the durable record;
-   - note in the summary what would have been proposed to `~/wiki/` — do not
-     propose it. An unmonitored agent does not touch the wiki at all.
-
-**One email per run, to that one address.** The email is the signal that pulls
-jef in to review. If `msmtp` fails, say so in the branch summary rather than
-retrying in a loop — a silent email means jef does not know work is waiting.
+- **Read-only checks** pair mode may run freely: `cargo check`, `cargo test`,
+  `cargo clippy`, `cargo fmt --check`, `cargo doc --no-deps`, `cargo build`.
+- **Unsupervised base branch:** `dev`. The end-of-run test suite is
+  `cargo test` and `cargo clippy`.
+- The **(a)/(b) test split** below applies in every mode and is the most
+  important project-specific rule here. When unsure, check the tier before
+  rewriting a test.
 
 ### Project-specific workflow deltas
 
@@ -216,8 +107,8 @@ repo root/
 │   ├── snake.rs             # snake game — interactive correctness harness
 │   └── picture_viewer.rs    # displays an image file on the canvas
 ├── assets/                  # example media (colorful_finches.jpeg)
-├── notes/                   # working scratch: brainstorms, plans, drafts;
-│   └── wiki-proposals/      #   dated proposals for ~/wiki/ (see Wiki section)
+├── notes/                   # working scratch: brainstorms, plans, drafts,
+│                            #   unsupervised goals and run summaries
 ├── README.md                # (planned — referenced by Cargo.toml, not yet written)
 └── AGENTS.md                # this file
 ```
@@ -311,21 +202,23 @@ else.
 - **No `~/.aws`, `~/.azure`, `~/.config/lab-bot`, or host tool directory.**
 - **`~/wiki/` is mounted read-only** — full read access to `kb/` and the
   projects pages, with no ability to write.
-- **`~/tools/llm-instructions/` and `~/tools/spend.py` are read-only**, so the
+- **The instructions, skills and `~/tools/spend.py` are read-only**, so the
   rules this session operates under cannot be edited mid-session.
-- **`~/.msmtprc` is read-only** — present only so an unsupervised run can send
-  its one summary email.
+- **No mail credentials.** There is no `msmtp` and no `~/.msmtprc`. The one
+  writable path outside the workspace is `~/outbox`, where `notify-jef` drops
+  a message; agentd on the host validates it, rate-limits it and mails it to
+  jef. The container cannot choose the recipient.
 - `--cap-drop=ALL` and `--security-opt=no-new-privileges:true`.
 
 Consequence: **the worst realistic outcome of a bad unattended run is commits
-and branches inside this repository, plus one email.** Nothing else on the
+and branches inside this repository, plus one notification to jef.** Nothing else on the
 machine is writable, and nothing else is reachable.
 
 ### Credentials
 
 Agent sessions push as `jefwagner` with a fine-grained PAT scoped to this repo
 only. Setup and the full permission list are in
-`~/tools/llm-instructions/pat-setup.md`; the token lives at
+the `pat-setup` skill (on the host); the token lives at
 `~/.config/jef/termcanvas-pat` (mode 600, outside the repo), bind-mounted in at
 the same relative path.
 
@@ -344,7 +237,7 @@ say so rather than working around it.
   only branches beyond these are the `agent/*` work branches below.
 - Work goes on `agent/<short-desc>` branches. Never commit to `main` or `dev`
   directly from an agent session.
-- Prefer a worktree for anything unattended (see Unsupervised mode, step 3).
+- Unattended work always runs in a worktree (the `unsupervised-run` skill).
 
 ### Residual risk — the honest remainder
 
@@ -361,39 +254,15 @@ say so rather than working around it.
 
 ## Wiki
 
-`~/wiki/` is **mounted read-only**. Read it freely — that is the point:
+`~/wiki/` is **mounted read-only**. Read it freely: `~/wiki/kb/` for the
+distilled fundamentals (terminal escape sequences, color models,
+character-cell rendering), and other projects' pages when a decision has
+cross-project implications.
 
-- `~/wiki/kb/` — the distilled fundamentals (terminal escape sequences, color
-  models, character-cell vs. pixel rendering, whatever the kb holds on TUI
-  rendering).
-- `~/wiki/projects/termcanvas/` — implementation specifics for this project
-  (when written).
-- `~/wiki/projects/<other>/` — **when a decision has cross-project
-  implications.** The sister projects share vocabulary and containment design;
-  reading them is how a decision gets made consistent with the rest of the
-  estate rather than merely locally plausible.
-
-**You cannot write to `~/wiki/`, and must not try.**
-
-### Proposing an update
-
-If the wiki would have changed, write a **proposal** to
-`notes/wiki-proposals/YYYY-MM-DD-short-topic.md` (create the directory if needed),
-structured as the change rather than as a session summary:
-
-- exact target paths under `~/wiki/`,
-- for each, the full new text or a precise before/after,
-- what `~/wiki/AGENTS.md` would require: new inbound links, index updates, a
-  matching edit to `kb/Projects-Summary.md`, cross-links to related pages.
-
-Commit it with the item and point at it in the end-of-chunk summary, so
-promotion is mechanical for a human rather than a research project.
-
-**Never promote a proposal yourself**, in any mode. The wiki is the one place in
-this estate where an undetected error gets *stronger with use* rather than
-caught: prose has no failing test.
-
-**While unsupervised, do not propose either** — note it in the summary and stop.
+**Never write to `~/wiki/`, and don't write wiki proposals.** The wiki is
+becoming a project catalog that the orchestrator maintains. Things worth
+keeping go in `notes/` (the `close-chunk` skill); unsupervised runs put them
+in the summary's "For the catalog" section.
 
 ## Things to Avoid
 
@@ -407,5 +276,4 @@ caught: prose has no failing test.
   dependency — keep decoders dev-only.
 - Do not claim a rendering change is verified by `cargo test` alone — say what
   example run is needed to see it.
-- Do not write to `~/wiki/` from implementation tasks — wiki updates happen via
-  proposals, promoted by a human.
+- Do not write to `~/wiki/`.
