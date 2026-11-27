@@ -52,5 +52,8 @@ cargo doc --no-deps   # API docs; the doctests are the examples
 
 ## Status
 
-See [ROADMAP.md](ROADMAP.md) for the long-term shape — video player,
-screensaver, and an arcade shell hosting games are planned.
+Milestones 1–4 are done and merged into `dev`: the workspace conversion,
+`termviewer`, `termcanvas-loop` v0, and `termsnake`. Milestone 5 — the video
+player — is next, scoped to animated GIF/APNG because the build environment has
+no `ffmpeg`/libav. The screensaver and the arcade shell follow; see
+[ROADMAP.md](ROADMAP.md).
